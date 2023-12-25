@@ -5,7 +5,8 @@ import 'package:messagepart/activity_page.dart';
 class ActivityScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final FirebaseHelper _firebaseHelper = ModalRoute.of(context)!.settings.arguments as FirebaseHelper;
+    final FirebaseHelper _firebaseHelper =
+    ModalRoute.of(context)!.settings.arguments as FirebaseHelper;
 
     return Scaffold(
       appBar: AppBar(
@@ -29,12 +30,23 @@ class ActivityScreen extends StatelessWidget {
             print('Number of tasks: ${tasks.length}');
             print('First task: ${tasks.isNotEmpty ? tasks[0].task : "No tasks"}');
 
-            return  ListView.builder(
+            return ListView.builder(
               itemCount: tasks.length,
               itemBuilder: (context, index) {
                 final task = tasks[index];
+
+                // Calculate the difference between start day and end day
+                Duration difference = task.selectedEndDay.difference(task.selectedStartDay);
+
                 return ListTile(
                   title: Text('${task.task ?? 'No task name'} : ${task.userEmail ?? 'Unknown'}'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Duration: ${difference.inDays} days'),
+                      Text('Times: ${task.repetitionCount} times'), // Display the times count
+                    ],
+                  ),
                   trailing: Checkbox(
                     value: task.isCompleted,
                     onChanged: null, // Set onChanged to null to make it non-interactive
@@ -42,7 +54,6 @@ class ActivityScreen extends StatelessWidget {
                 );
               },
             );
-
           }
         },
       ),
