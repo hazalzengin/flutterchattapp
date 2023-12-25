@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "340100178581",
+    "project_id": "graduation-forbit",
+    "storage_bucket": "graduation-forbit.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:340100178581:android:2d0fc8dd391ed22d5a719c",
+        "android_client_info": {
+          "package_name": "com.example.graduation"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9lvMTIj0pIJsOYh-IP46P6ZDT7OCR89Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:340100178581:android:d8ace97a07093b485a719c",
+        "android_client_info": {
+          "package_name": "com.example.messagepart"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9lvMTIj0pIJsOYh-IP46P6ZDT7OCR89Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
