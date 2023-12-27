@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:messagepart/activity_page.dart';
 import 'package:messagepart/chat_page.dart';
+import 'package:messagepart/create_groupchat_screen.dart';
 import 'package:messagepart/services/auth/auth_service.dart';
 import 'package:provider/provider.dart';
 
@@ -14,6 +15,7 @@ class HomePage extends StatefulWidget{
   State<HomePage> createState()=> _HomePageState();
 }
 class _HomePageState extends State<HomePage> {
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   void signOut() {
@@ -36,19 +38,19 @@ class _HomePageState extends State<HomePage> {
           ),
         ],),
       body: Column(
-          children: [
+        children: [
           Expanded(
-          child: _buildUserList(),
-    ),
-    Padding(
-    padding: const EdgeInsets.all(8.0),
-    child: ElevatedButton(
-    onPressed: () {
-      navigateToChecklistScreen(context);
-    },
-    child: Text('Exercise ataması'),
-    ),
-    ),],),
+            child: _buildUserList(),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: ElevatedButton(
+              onPressed: () {
+                navigateToChecklistScreen(context);
+              },
+              child: Text('Exercise ataması'),
+            ),
+          ),],),
     );
   }
 
