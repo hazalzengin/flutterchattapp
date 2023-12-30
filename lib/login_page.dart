@@ -29,19 +29,20 @@ class _LoginPageState extends State<LoginPage> {
 
       UserType? userType = await authService.getUserType();
 
-      // Navigate based on user type
-      if (userType == 1) {
+      if (userType == UserType.trainee) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => TraneeHomePage()),
         );
-      } else if (userType == 0) {
+      } else if (userType == UserType.trainer) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => HomePage()),
         );
       } else {
+        // Handle the case where the user type is neither trainee nor trainer
       }
+
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

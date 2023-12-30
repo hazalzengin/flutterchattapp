@@ -72,14 +72,17 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
         password: password,
       );
 
-      // Set or update admin data in Firestore
-      await _firestore.collection('admin').doc(userCredential.user!.uid).set(
-        {
-          'uid': userCredential.user!.uid,
-          'email': email,
-        },
-        SetOptions(merge: true),
-      );
+      // Check if the user is an admin by querying the "admin" collection
+      DocumentSnapshot adminSnapshot =
+      await _firestore.collection('admin').doc(userCredential.user!.uid).get();
+
+      if (!adminSnapshot.exists) {
+        // The user is not an admin
+        throw FirebaseAuthException(
+          code: 'not-an-admin',
+          message: 'User is not authorized as an admin',
+        );
+      }
 
       // Navigate to the AdminHomePage
       Navigator.pushReplacement(
@@ -87,7 +90,23 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
         MaterialPageRoute(builder: (context) => AdminPage()),
       );
     } on FirebaseAuthException catch (e) {
-      throw Exception(e.code);
+      // Handle different authentication failure scenarios
+      if (e.code == 'user-not-found') {
+        print('User not found');
+      } else if (e.code == 'wrong-password') {
+        print('Invalid password');
+      } else if (e.code == 'not-an-admin') {
+        print('User is not authorized as an admin');
+      } else {
+        print('Error signing in as admin: ${e.code}');
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to sign in as admin. Check your credentials.'),
+        ),
+      );
     }
   }
+
 }

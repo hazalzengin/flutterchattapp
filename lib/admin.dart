@@ -56,7 +56,7 @@ class UserList extends StatelessWidget {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (userType == '-1') ...[
+                  if (userType == -1) ...[
                     ElevatedButton(
                       onPressed: () {
                         _acceptUser(userDoc.id);

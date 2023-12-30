@@ -1,12 +1,17 @@
+import 'dart:io';
+import 'dart:typed_data' show Uint8List;
+import 'package:file_picker/file_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:messagepart/ActivityShow.dart';
+import 'package:uuid/uuid.dart'; // Add the uuid package for unique filenames
 
 class ChecklistScreen extends StatefulWidget {
   @override
   _ChecklistScreenState createState() => _ChecklistScreenState();
 }
-
 
 class Task {
   late String id;
@@ -17,8 +22,19 @@ class Task {
   late DateTime selectedStartDay;
   late DateTime selectedEndDay;
   late int repetitionCount;
+  late String videoDownloadUrl;
 
-  Task(this.id, this.userId, this.task, this.isCompleted, this.userEmail, this.selectedStartDay, this.selectedEndDay, this.repetitionCount);
+  Task(
+      this.id,
+      this.userId,
+      this.task,
+      this.isCompleted,
+      this.userEmail,
+      this.selectedStartDay,
+      this.selectedEndDay,
+      this.repetitionCount,
+      this.videoDownloadUrl,
+      );
 
   Task.fromMap(Map<String, dynamic>? map) {
     id = map?['id'] ?? '';
@@ -26,9 +42,10 @@ class Task {
     task = map?['task'] ?? '';
     isCompleted = map?['isCompleted'] ?? false;
     userEmail = map?['userEmail'] ?? '';
-    selectedStartDay = (map?['selectedStartDay'] as Timestamp?)?.toDate() ?? DateTime.now();
-    selectedEndDay = (map?['selectedEndDay'] as Timestamp?)?.toDate() ?? DateTime.now();
+    selectedStartDay = _parseTimestamp(map?['selectedStartDay']) ?? DateTime.now();
+    selectedEndDay = _parseTimestamp(map?['selectedEndDay']) ?? DateTime.now();
     repetitionCount = map?['repetitionCount'] ?? 0;
+    videoDownloadUrl = map?['videoDownloadUrl'] ?? '';
   }
 
   Map<String, dynamic> toMap() {
@@ -40,37 +57,147 @@ class Task {
       'selectedStartDay': selectedStartDay,
       'selectedEndDay': selectedEndDay,
       'repetitionCount': repetitionCount,
+      'videoDownloadUrl': videoDownloadUrl,
     };
+  }
+
+  DateTime? _parseTimestamp(dynamic timestamp) {
+    if (timestamp is Timestamp) {
+      return timestamp.toDate();
+    }
+    return null; // or throw an exception, depending on your logic
   }
 }
 
 class _ChecklistScreenState extends State<ChecklistScreen> {
-  void navigateToChecklistScreen(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ActivityScreen(), // Make sure ActivityScreen is imported correctly
-        settings: RouteSettings(arguments: _firebaseHelper),
-      ),
-    );
-  }
+  final FirebaseHelper _firebaseHelper = FirebaseHelper();
   int selectedRepetitionCount = 7;
   List<int> repetitionCountOptions = [7, 10, 15, 20, 25, 30];
 
   DateTime _selectedStartDay = DateTime.now();
   DateTime _selectedEndDay = DateTime.now();
   final TextEditingController _taskController = TextEditingController();
-  final FirebaseHelper _firebaseHelper = FirebaseHelper();
   String selectedUserId = '';
   String selectedUserEmail = '';
+  late String _downloadURL = '';
   List<DropdownMenuItem<String>> dropdownItemsForUsers = [];
+
+  File? _videoFile;
+  Uint8List? _videoBytes;
+  File? _uploadedVideoFile;
 
   @override
   void initState() {
     super.initState();
+
+    // Fetch users and update dropdown
     _fetchUsersAndUpdateDropdown().then((_) {
       selectedUserId = dropdownItemsForUsers.isNotEmpty ? dropdownItemsForUsers.first.value ?? '' : '';
     });
+  }
+
+  Future<void> _pickVideo() async {
+    if (kIsWeb) {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.video,
+        allowCompression: true,
+      );
+
+      if (result != null) {
+        setState(() {
+          _videoBytes = result.files.single.bytes;
+          _videoFile = null; // Clear video file if bytes are selected
+        });
+      }
+    } else {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.video,
+        allowCompression: true,
+      );
+
+      if (result != null) {
+        setState(() {
+          _videoFile = File(result.files.single.path!);
+          _videoBytes = null; // Clear video bytes if a file is selected
+        });
+      }
+    }
+  }
+
+  Future<void> _uploadVideoToFirebaseStorage() async {
+    try {
+      if (_videoFile != null || (_videoBytes != null && _videoBytes!.isNotEmpty)) {
+        Reference storageReference = FirebaseStorage.instance.ref().child('videos/${Uuid().v4()}.mp4');
+        UploadTask uploadTask;
+
+        if (_videoFile != null) {
+          uploadTask = storageReference.putFile(_videoFile!);
+        } else if (_videoBytes != null) {
+          uploadTask = storageReference.putData(_videoBytes!);
+        } else {
+          print('No valid video file or bytes to upload');
+          return;
+        }
+
+        uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) async {
+          if (snapshot.state == TaskState.success) {
+            print('Upload complete!');
+            // Retrieve download URL here
+            _downloadURL = await snapshot.ref.getDownloadURL();
+
+            setState(() {
+              if (_videoFile != null) {
+                _uploadedVideoFile = _videoFile; // Store the reference before setting to null
+              }
+              _videoFile = null;
+              _videoBytes = null;
+            });
+            print('Download URL: $_downloadURL');
+
+            _addTaskToFirestore();
+          } else if (snapshot.state == TaskState.running) {
+            print('Upload is still in progress...');
+          } else if (snapshot.state == TaskState.error) {
+            print('Error during upload: ${snapshot.storage}');
+          }
+        });
+        await uploadTask;
+      } else {
+        print('No valid video file or bytes to upload');
+      }
+    } catch (e) {
+      print('Error uploading video: $e');
+      // Handle the error appropriately
+    }
+  }
+
+  void _addTaskToFirestore() async {
+    try {
+      if (_taskController.text.isNotEmpty && selectedUserId.isNotEmpty && _downloadURL.isNotEmpty) {
+        await _firebaseHelper.addTask(
+          Task(
+            '', // Leave it empty, Firestore will generate the ID
+            selectedUserId,
+            _taskController.text.trim(),
+            false,
+            selectedUserEmail,
+            _selectedStartDay,
+            _selectedEndDay,
+            selectedRepetitionCount,
+            _downloadURL,
+          ),
+          selectedUserId,
+          selectedStartDay: _selectedStartDay,
+          selectedEndDay: _selectedEndDay,
+          repetitionCount: selectedRepetitionCount,
+          videoDownloadUrl: _downloadURL,
+        );
+        _taskController.clear();
+      }
+    } catch (e) {
+      print('Error adding task: $e');
+      // Handle the error appropriately
+    }
   }
 
   @override
@@ -91,63 +218,69 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
               ),
             ),
             SizedBox(height: 8.0),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButton<String>(
-                    value: selectedUserId,
-                    onChanged: (String? newValue) {
-                      if (newValue != null) {
-                        setState(() {
-                          selectedUserId = newValue;
-                        });
-                      }
-                    },
-                    items: dropdownItemsForUsers.isNotEmpty
-                        ? dropdownItemsForUsers
-                        : [
-                      DropdownMenuItem<String>(
-                        value: '',
-                        child: Text('No users'),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(width: 8.0),
-                DropdownButton<int>(
-                  value: selectedRepetitionCount,
-                  onChanged: (int? newValue) {
-                    if (newValue != null) {
-                      setState(() {
-                        selectedRepetitionCount = newValue;
-                      });
-                    }
-                  },
-                  items: repetitionCountOptions.map((int count) {
-                    return DropdownMenuItem<int>(
-                      value: count,
-                      child: Text('$count repetitions'),
-                    );
-                  }).toList(),
-                ),
-                SizedBox(width: 8.0),
-                ElevatedButton(
-                  onPressed: () async {
-                    String task = _taskController.text.trim();
-                    if (task.isNotEmpty && selectedUserId.isNotEmpty) {
-                      await _firebaseHelper.addTask(
-                        Task('', selectedUserId, task, false, '', _selectedStartDay, _selectedEndDay, selectedRepetitionCount),
-                        selectedUserId,
-                        selectedStartDay: _selectedStartDay,
-                        selectedEndDay: _selectedEndDay,
-                        repetitionCount: selectedRepetitionCount,
-                      );
-                      _taskController.clear();
-                    }
-                  },
-                  child: Text('Add Task'),
+            DropdownButton<String>(
+              value: selectedUserId,
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    selectedUserId = newValue;
+                  });
+                }
+              },
+              items: dropdownItemsForUsers.isNotEmpty
+                  ? dropdownItemsForUsers
+                  : [
+                DropdownMenuItem<String>(
+                  value: '',
+                  child: Text('No users'),
                 ),
               ],
+            ),
+            SizedBox(height: 8.0),
+            DropdownButton<int>(
+              value: selectedRepetitionCount,
+              onChanged: (int? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    selectedRepetitionCount = newValue;
+                  });
+                }
+              },
+              items: repetitionCountOptions.map((int count) {
+                return DropdownMenuItem<int>(
+                  value: count,
+                  child: Text('$count repetitions'),
+                );
+              }).toList(),
+            ),
+            SizedBox(height: 8.0),
+            ElevatedButton(
+              onPressed: () async {
+                await _uploadVideoToFirebaseStorage();
+                String task = _taskController.text.trim();
+                if (task.isNotEmpty && selectedUserId.isNotEmpty && _downloadURL.isNotEmpty) {
+                  await _firebaseHelper.addTask(
+                    Task(
+                      '', // Leave it empty, Firestore will generate the ID
+                      selectedUserId,
+                      task,
+                      false,
+                      selectedUserEmail,
+                      _selectedStartDay,
+                      _selectedEndDay,
+                      selectedRepetitionCount,
+                      _downloadURL,
+                    ),
+                    selectedUserId,
+                    selectedStartDay: _selectedStartDay,
+                    selectedEndDay: _selectedEndDay,
+                    repetitionCount: selectedRepetitionCount,
+                    videoDownloadUrl: _downloadURL,
+                  );
+                  _taskController.clear();
+                }
+              },
+              child: Text('Add Task'),
             ),
             SizedBox(height: 16.0),
             ElevatedButton(
@@ -155,6 +288,11 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                 _selectNewDay(context, true);
               },
               child: Text('Select Start Day'),
+            ),
+            SizedBox(height: 8.0),
+            ElevatedButton(
+              onPressed: _pickVideo,
+              child: Text('Pick Video'),
             ),
             SizedBox(height: 8.0),
             ElevatedButton(
@@ -172,6 +310,17 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+
+  void navigateToChecklistScreen(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ActivityScreen(), // Make sure ActivityScreen is imported correctly
+        settings: RouteSettings(arguments: _firebaseHelper),
       ),
     );
   }
@@ -236,15 +385,25 @@ class FirebaseHelper {
   final CollectionReference usersCollection = FirebaseFirestore.instance.collection('users');
 
   Future<void> addTask(Task task, String userId,
-      {required DateTime selectedStartDay, required DateTime selectedEndDay, required int repetitionCount}) async {
-    String userEmail = await getUserEmail(userId);
-    await tasksCollection.add({
-      ...task.toMap(),
-      'userEmail': userEmail,
-      'selectedStartDay': selectedStartDay,
-      'selectedEndDay': selectedEndDay,
-      'repetitionCount': repetitionCount,
-    });
+      {required DateTime selectedStartDay,
+        required DateTime selectedEndDay,
+        required int repetitionCount,
+        required String videoDownloadUrl}) async {
+    try {
+      String userEmail = await getUserEmail(userId);
+      await tasksCollection.add({
+        'userId': userId,
+        'task': task.task,
+        'isCompleted': task.isCompleted,
+        'userEmail': userEmail,
+        'selectedStartDay': selectedStartDay,
+        'selectedEndDay': selectedEndDay,
+        'repetitionCount': repetitionCount,
+        'videoDownloadUrl': videoDownloadUrl,
+      });
+    } catch (e) {
+      print('Error adding task: $e');
+    }
   }
 
   Future<String> getUserEmail(String userId) async {
@@ -264,3 +423,5 @@ class FirebaseHelper {
     });
   }
 }
+
+
