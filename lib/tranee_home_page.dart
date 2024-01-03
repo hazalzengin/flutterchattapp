@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:messagepart/update_profile.dart'; // Import the update profile page
+import 'package:messagepart/update_profile.dart';
+import 'package:image/image.dart' as img;
 
 class ProfilePage extends StatefulWidget {
   @override
@@ -10,11 +11,59 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   late User? user;
+  String? profileImageUrl;
+  bool isImageLoading = false;
+  bool isDisposed = false;
 
   @override
   void initState() {
     super.initState();
     user = FirebaseAuth.instance.currentUser;
+    fetchProfileImageUrl();
+  }
+
+  @override
+  void dispose() {
+    isDisposed = true;
+    super.dispose();
+  }
+
+  Future<void> fetchProfileImageUrl() async {
+    try {
+      DocumentSnapshot snapshot = await FirebaseFirestore.instance.collection('users').doc(user?.uid).get();
+      if (!isDisposed) {
+        if (snapshot.exists) {
+          Map<String, dynamic> userData = snapshot.data() as Map<String, dynamic>;
+
+          if (userData.containsKey('profileImageUrl') && userData['profileImageUrl'] != null) {
+            setState(() {
+              profileImageUrl = Uri.tryParse(userData['profileImageUrl'])?.toString();
+            });
+          } else {
+            print('Profile image URL is missing or null');
+          }
+        }
+      }
+    } catch (e) {
+      if (!isDisposed) {
+        print('Error fetching profile image URL: $e');
+      }
+    }
+  }
+
+  double? calculateBMI(Map<String, dynamic> userData) {
+    double? weight = userData['weight']?.toDouble();
+    double? height = userData['height']?.toDouble();
+
+    if (weight != null && height != null && height > 0) {
+      // Convert height to meters
+      double heightInMeters = height / 100;
+
+      // Calculate BMI
+      return weight / (heightInMeters * heightInMeters);
+    } else {
+      return null;
+    }
   }
 
   @override
@@ -45,8 +94,8 @@ class _ProfilePageState extends State<ProfilePage> {
           }
 
           Map<String, dynamic> userData = snapshot.data!.data() as Map<String, dynamic>;
+          double? bmi = calculateBMI(userData);
 
-          // Combine name and surname fields to display full name
           String fullName = '${userData['name']} ${userData['surname']}';
 
           return Padding(
@@ -69,11 +118,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: Container(
                       width: 140,
                       height: 140,
-                      child: Icon(
-                        Icons.person,
-                        size: 100,  // Adjust the size of the person icon as needed
-                        color: Colors.white,
-                      ),
+                      child: buildProfileImage(),
                     ),
                   ),
                 ),
@@ -92,12 +137,6 @@ class _ProfilePageState extends State<ProfilePage> {
                   height: 70.0,
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.account_circle,
-                        size: 48,
-                        color: Colors.black,
-                      ),
-                      SizedBox(width: 16),
                       Text(
                         fullName,
                         style: TextStyle(
@@ -237,7 +276,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 height: double.infinity,
                                 alignment: Alignment.center,
                                 child: Text(
-                                  '${userData['bmi'] ?? ''}',
+                                  '${bmi != null ? bmi.toStringAsFixed(2) : 'N/A'}',
                                   style: TextStyle(
                                     color: Colors.black,
                                     fontWeight: FontWeight.bold,
@@ -258,7 +297,6 @@ class _ProfilePageState extends State<ProfilePage> {
                   width: 350,
                   child: ElevatedButton(
                     onPressed: () {
-                      // Navigate to the UpdateProfilePage when the button is pressed
                       Navigator.push(
                         context,
                         MaterialPageRoute(builder: (context) => UpdateProfilePage()),
@@ -286,5 +324,43 @@ class _ProfilePageState extends State<ProfilePage> {
         },
       ),
     );
+  }
+
+  Widget buildProfileImage() {
+    if (profileImageUrl != null && profileImageUrl!.isNotEmpty) {
+      return Image.network(
+        profileImageUrl!,
+        fit: BoxFit.cover,
+        loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+          if (loadingProgress == null) {
+            return child;
+          } else {
+            return Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+        },
+        errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
+          print('Error loading profile image: $error');
+          if (error is Exception) {
+            print('Error message: ${error.toString()}');
+          }
+          if (stackTrace != null) {
+            print('Stack trace: $stackTrace');
+          }
+          return Icon(
+            Icons.error_outline,
+            size: 100,
+            color: Colors.red,
+          );
+        },
+      );
+    } else {
+      return Icon(
+        Icons.person,
+        size: 100,
+        color: Colors.grey,
+      );
+    }
   }
 }
