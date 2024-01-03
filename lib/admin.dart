@@ -59,22 +59,36 @@ class UserList extends StatelessWidget {
                   if (userType == -1) ...[
                     ElevatedButton(
                       onPressed: () {
-                        _acceptUser(userDoc.id);
+                        _showConfirmationDialog(
+                          context,
+                          'Accept User',
+                          'Are you sure you want to accept this user?',
+                              () => _acceptUser(userDoc.id),
+                        );
                       },
                       child: Text('Accept'),
                     ),
                     SizedBox(width: 8),
                     ElevatedButton(
                       onPressed: () {
-                        _launchPDF(certificationFileURL);
+                        _showConfirmationDialog(
+                          context,
+                          'View Certification',
+                          'Are you sure you want to view the certification?',
+                              () => _launchPDF(certificationFileURL),
+                        );
                       },
                       child: Text('View Certification'),
                     ),
                   ],
                   ElevatedButton(
                     onPressed: () {
-                      // Reject user
-                      _rejectUser(userDoc.id);
+                      _showConfirmationDialog(
+                        context,
+                        'Reject User',
+                        'Are you sure you want to reject this user?',
+                            () => _rejectUser(userDoc.id),
+                      );
                     },
                     child: Text('Reject'),
                   ),
@@ -82,6 +96,38 @@ class UserList extends StatelessWidget {
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  void _showConfirmationDialog(
+      BuildContext context,
+      String title,
+      String content,
+      Function onPressed,
+      ) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(content),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+              },
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                onPressed();
+                Navigator.of(context).pop(); // Close the dialog
+              },
+              child: Text('Yes'),
+            ),
+          ],
         );
       },
     );

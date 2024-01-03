@@ -32,7 +32,7 @@ class _LoginPageState extends State<LoginPage> {
       if (userType == UserType.trainee) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => TraneeHomePage()),
+          MaterialPageRoute(builder: (context) => ProfilePage()),
         );
       } else if (userType == UserType.trainer) {
         Navigator.pushReplacement(

@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:messagepart/ActivityShow.dart';
-import 'package:uuid/uuid.dart'; // Add the uuid package for unique filenames
+import 'package:uuid/uuid.dart';
+import 'package:video_compress/video_compress.dart';
+
 
 class ChecklistScreen extends StatefulWidget {
   @override
@@ -127,6 +129,14 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   Future<void> _uploadVideoToFirebaseStorage() async {
     try {
       if (_videoFile != null || (_videoBytes != null && _videoBytes!.isNotEmpty)) {
+        // Compress video if it's a file
+        if (_videoFile != null) {
+          _videoFile = (await VideoCompress.compressVideo(
+            _videoFile!.path,
+            quality: VideoQuality.DefaultQuality,
+          )) as File?;
+        }
+
         Reference storageReference = FirebaseStorage.instance.ref().child('videos/${Uuid().v4()}.mp4');
         UploadTask uploadTask;
 
@@ -170,6 +180,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
       // Handle the error appropriately
     }
   }
+
 
   void _addTaskToFirestore() async {
     try {
@@ -297,9 +308,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
             SizedBox(height: 8.0),
             ElevatedButton(
               onPressed: () {
-                _selectNewDay(context, false);
+                _selectDuration(context);
               },
-              child: Text('Select End Day'),
+              child: Text('Select Duration'),
             ),
             SizedBox(height: 8.0),
             ElevatedButton(
@@ -313,7 +324,6 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
       ),
     );
   }
-
 
   void navigateToChecklistScreen(BuildContext context) {
     Navigator.push(
@@ -343,6 +353,36 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
       });
     }
   }
+
+  Future<void> _selectDuration(BuildContext context) async {
+    int initialDays = (_selectedEndDay.difference(_selectedStartDay).inDays + 1).clamp(1, 365);
+
+    int? pickedDays = await showDialog<int>(
+      context: context,
+      builder: (BuildContext context) {
+        return SimpleDialog(
+          title: Text('Select Duration in Days'),
+          children: [5, 10, 15, 30, 60, 90].map((days) {
+            return SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(context, days);
+              },
+              child: Text('$days day${days == 1 ? '' : 's'}'),
+            );
+          }).toList(),
+        );
+      },
+    );
+
+    if (pickedDays != null) {
+      setState(() {
+        _selectedEndDay = _selectedStartDay.add(Duration(days: pickedDays));
+      });
+    }
+  }
+
+
+
 
   Future<List<DropdownMenuItem<String>>> _fetchUsersAndUpdateDropdown() async {
     try {
@@ -423,5 +463,3 @@ class FirebaseHelper {
     });
   }
 }
-
-

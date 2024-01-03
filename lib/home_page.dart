@@ -5,6 +5,7 @@ import 'package:messagepart/activity_page.dart';
 import 'package:messagepart/chat_page.dart';
 import 'package:messagepart/create_groupchat_screen.dart';
 import 'package:messagepart/services/auth/auth_service.dart';
+import 'package:messagepart/user_task.dart';
 import 'package:provider/provider.dart';
 
 
@@ -90,11 +91,7 @@ class _HomePageState extends State<HomePage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) =>
-                  ChatPage(
-                    receiverUserEmail: userEmail,
-                    receiverUserID: userId,
-                  ),
+              builder: (context) => UserTasksPage(userEmail: userEmail),
             ),
           );
         },
@@ -103,4 +100,6 @@ class _HomePageState extends State<HomePage> {
       return Container();
     }
   }
+
+
 }

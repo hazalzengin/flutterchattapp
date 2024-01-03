@@ -30,7 +30,7 @@ class AuthGate extends StatelessWidget {
                     return const HomePage();
 
                   } else if (userType == UserType.values.last) {
-                    return const TraneeHomePage();
+                    return ProfilePage();
                   } else {
                     return Center(
                       child: Text(
