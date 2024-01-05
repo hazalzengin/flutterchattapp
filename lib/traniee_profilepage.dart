@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:messagepart/update_profile.dart';
-import 'package:image/image.dart' as img;
 
 class ProfilePage extends StatefulWidget {
   @override

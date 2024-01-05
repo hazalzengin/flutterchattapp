@@ -129,107 +129,132 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   Future<void> _uploadVideoToFirebaseStorage() async {
     try {
       if (_videoFile != null || (_videoBytes != null && _videoBytes!.isNotEmpty)) {
-        // Compress video if it's a file
-        if (_videoFile != null) {
-          _videoFile = (await VideoCompress.compressVideo(
-            _videoFile!.path,
-            quality: VideoQuality.DefaultQuality,
-          )) as File?;
-        }
 
-        Reference storageReference = FirebaseStorage.instance.ref().child('videos/${Uuid().v4()}.mp4');
-        UploadTask uploadTask;
+        if (_videoFile != null || (_videoBytes != null && _videoBytes!.isNotEmpty)) {
 
-        if (_videoFile != null) {
-          uploadTask = storageReference.putFile(_videoFile!);
-        } else if (_videoBytes != null) {
-          uploadTask = storageReference.putData(_videoBytes!);
-        } else {
-          print('No valid video file or bytes to upload');
-          return;
-        }
-
-        uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) async {
-          if (snapshot.state == TaskState.success) {
-            print('Upload complete!');
-            // Retrieve download URL here
-            _downloadURL = await snapshot.ref.getDownloadURL();
-
-            setState(() {
-              if (_videoFile != null) {
-                _uploadedVideoFile = _videoFile; // Store the reference before setting to null
-              }
-              _videoFile = null;
-              _videoBytes = null;
-            });
-            print('Download URL: $_downloadURL');
-
-            _addTaskToFirestore();
-          } else if (snapshot.state == TaskState.running) {
-            print('Upload is still in progress...');
-          } else if (snapshot.state == TaskState.error) {
-            print('Error during upload: ${snapshot.storage}');
+          if (_videoFile != null) {
+            _videoFile = (await VideoCompress.compressVideo(
+              _videoFile!.path,
+              quality: VideoQuality.DefaultQuality,
+            )) as File?;
           }
-        });
-        await uploadTask;
+
+          Reference storageReference = FirebaseStorage.instance.ref().child('videos/${Uuid().v4()}.mp4');
+          UploadTask uploadTask;
+
+          if (_videoFile != null) {
+            uploadTask = storageReference.putFile(_videoFile!);
+          } else if (_videoBytes != null) {
+            uploadTask = storageReference.putData(_videoBytes!);
+          } else {
+            print('Video yüklemek için geçerli bir dosya veya veri yok');
+            // Video eklemek istemiyor, bu durumu atla
+            _addTaskToFirestore(); // Video seçilmemişse sadece görev bilgilerini ekleyin
+            return;
+          }
+
+          uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) async {
+            if (snapshot.state == TaskState.success) {
+              print('Upload complete!');
+              // Retrieve download URL here
+              _downloadURL = await snapshot.ref.getDownloadURL();
+
+              setState(() {
+                if (_videoFile != null) {
+                  _uploadedVideoFile = _videoFile; // Store the reference before setting to null
+                }
+                _videoFile = null;
+                _videoBytes = null;
+              });
+              print('Download URL: $_downloadURL');
+
+              _addTaskToFirestore();
+            } else if (snapshot.state == TaskState.running) {
+              print('Upload is still in progress...');
+            } else if (snapshot.state == TaskState.error) {
+              print('Error during upload: ${snapshot.storage}');
+            }
+          });
+          await uploadTask;
+        } else {
+          print('Video yüklemek için geçerli bir dosya veya veri yok');
+          _addTaskToFirestore();
+        }
       } else {
-        print('No valid video file or bytes to upload');
+        print('Video yüklemek için geçerli bir dosya veya veri yok');
+
+        _addTaskToFirestore();
       }
     } catch (e) {
-      print('Error uploading video: $e');
-      // Handle the error appropriately
+      print('Video yüklerken hata oluştu: $e');
+
     }
   }
 
 
   void _addTaskToFirestore() async {
     try {
-      if (_taskController.text.isNotEmpty && selectedUserId.isNotEmpty && _downloadURL.isNotEmpty) {
+      if (_taskController.text.isNotEmpty && selectedUserId.isNotEmpty) {
+        Task newTask = Task(
+          '', // Firestore will generate the ID
+          selectedUserId,
+          _taskController.text.trim(),
+          false,
+          selectedUserEmail,
+          _selectedStartDay,
+          _selectedEndDay,
+          selectedRepetitionCount,
+          '',
+        );
+
+        // Check if a video is selected
+        if (_videoFile != null || (_videoBytes != null && _videoBytes!.isNotEmpty)) {
+          newTask.videoDownloadUrl = _downloadURL;
+        }
+
         await _firebaseHelper.addTask(
-          Task(
-            '', // Leave it empty, Firestore will generate the ID
-            selectedUserId,
-            _taskController.text.trim(),
-            false,
-            selectedUserEmail,
-            _selectedStartDay,
-            _selectedEndDay,
-            selectedRepetitionCount,
-            _downloadURL,
-          ),
+          newTask,
           selectedUserId,
           selectedStartDay: _selectedStartDay,
           selectedEndDay: _selectedEndDay,
           repetitionCount: selectedRepetitionCount,
           videoDownloadUrl: _downloadURL,
         );
+
         _taskController.clear();
+      } else {
+        print('Error: Task or User is empty.');
       }
     } catch (e) {
       print('Error adding task: $e');
-      // Handle the error appropriately
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Checklist'),
+        title: Text('Give task your traniee'),
+        backgroundColor: Colors.blue,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: ListView(
           children: [
             TextField(
               controller: _taskController,
               decoration: InputDecoration(
                 hintText: 'Enter task',
+                fillColor: Colors.grey[200],
+                filled: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10.0),
+                ),
               ),
             ),
-            SizedBox(height: 8.0),
-            DropdownButton<String>(
+            SizedBox(height: 16.0),
+            DropdownButtonFormField<String>(
               value: selectedUserId,
               onChanged: (String? newValue) {
                 if (newValue != null) {
@@ -246,9 +271,17 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                   child: Text('No users'),
                 ),
               ],
+              decoration: InputDecoration(
+                labelText: 'Select User',
+                fillColor: Colors.grey[200],
+                filled: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10.0),
+                ),
+              ),
             ),
-            SizedBox(height: 8.0),
-            DropdownButton<int>(
+            SizedBox(height: 16.0),
+            DropdownButtonFormField<int>(
               value: selectedRepetitionCount,
               onChanged: (int? newValue) {
                 if (newValue != null) {
@@ -263,13 +296,65 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                   child: Text('$count repetitions'),
                 );
               }).toList(),
+              decoration: InputDecoration(
+                labelText: 'Select Repetition Count',
+                fillColor: Colors.grey[200],
+                filled: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10.0),
+                ),
+              ),
             ),
-            SizedBox(height: 8.0),
+            SizedBox(height: 16.0),
+            ElevatedButton.icon(
+              onPressed: () {
+                _pickVideo();
+              },
+              icon: Icon(Icons.video_library), // Video ikonu
+              label: Text('Pick Video'),
+              style: ElevatedButton.styleFrom(
+                primary: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.0),
+                ),
+              ),
+            ),
+            SizedBox(height: 16.0),
+            ElevatedButton(
+              onPressed: () {
+                _selectNewDay(context, true);
+              },
+              child: Text('Select Start Day'),
+              style: ElevatedButton.styleFrom(
+                primary: Colors.orange, // İsteğe bağlı: Buton rengi
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.0),
+                ),
+              ),
+            ),
+
+
+            SizedBox(height: 16.0),
+            ElevatedButton(
+              onPressed: () {
+                _selectDuration(context);
+              },
+              child: Text('Select Duration'),
+              style: ElevatedButton.styleFrom(
+                primary: Colors.cyan, // İsteğe bağlı: Buton rengi
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.0),
+                ),
+              ),
+            ),
+            SizedBox(height: 16.0),
             ElevatedButton(
               onPressed: () async {
                 await _uploadVideoToFirebaseStorage();
                 String task = _taskController.text.trim();
-                if (task.isNotEmpty && selectedUserId.isNotEmpty && _downloadURL.isNotEmpty) {
+                if (task.isNotEmpty &&
+                    selectedUserId.isNotEmpty &&
+                    _downloadURL.isNotEmpty) {
                   await _firebaseHelper.addTask(
                     Task(
                       '', // Leave it empty, Firestore will generate the ID
@@ -291,39 +376,23 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                   _taskController.clear();
                 }
               },
-              child: Text('Add Task'),
-            ),
-            SizedBox(height: 16.0),
-            ElevatedButton(
-              onPressed: () {
-                _selectNewDay(context, true);
-              },
-              child: Text('Select Start Day'),
-            ),
-            SizedBox(height: 8.0),
-            ElevatedButton(
-              onPressed: _pickVideo,
-              child: Text('Pick Video'),
-            ),
-            SizedBox(height: 8.0),
-            ElevatedButton(
-              onPressed: () {
-                _selectDuration(context);
-              },
-              child: Text('Select Duration'),
-            ),
-            SizedBox(height: 8.0),
-            ElevatedButton(
-              onPressed: () {
-                navigateToChecklistScreen(context);
-              },
-              child: Text('Go to Activity Screen'),
+              child: Text(
+                'Add Task',
+                style: TextStyle(color: Colors.white), // İsteğe bağlı: Metin rengi
+              ),
+              style: ElevatedButton.styleFrom(
+                primary: Colors.indigo,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.0),
+                ),
+              ),
             ),
           ],
         ),
       ),
     );
   }
+
 
   void navigateToChecklistScreen(BuildContext context) {
     Navigator.push(

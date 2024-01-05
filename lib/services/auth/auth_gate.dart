@@ -3,7 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:messagepart/register_page.dart';
 import 'package:messagepart/services/auth/auth_service.dart';
 import 'package:messagepart/services/auth/loginorregister.dart';
-import 'package:messagepart/tranee_home_page.dart';
+import 'package:messagepart/traniee_homepage.dart';
+import 'package:messagepart/traniee_profilepage.dart';
 import '../../home_page.dart';
 
 
@@ -30,7 +31,7 @@ class AuthGate extends StatelessWidget {
                     return const HomePage();
 
                   } else if (userType == UserType.values.last) {
-                    return ProfilePage();
+                    return TranieeHomePage();
                   } else {
                     return Center(
                       child: Text(

@@ -5,7 +5,8 @@ import 'package:messagepart/components/my_text_field.dart';
 import 'package:messagepart/home_page.dart';
 import 'package:messagepart/register_page.dart';
 import 'package:messagepart/services/auth/auth_service.dart';
-import 'package:messagepart/tranee_home_page.dart';
+import 'package:messagepart/traniee_homepage.dart';
+import 'package:messagepart/traniee_profilepage.dart';
 import 'package:provider/provider.dart';
 
 class LoginPage extends StatefulWidget {
@@ -32,7 +33,7 @@ class _LoginPageState extends State<LoginPage> {
       if (userType == UserType.trainee) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => ProfilePage()),
+          MaterialPageRoute(builder: (context) => TranieeHomePage()),
         );
       } else if (userType == UserType.trainer) {
         Navigator.pushReplacement(

@@ -1,9 +1,10 @@
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:messagepart/chat_page.dart'; // Replace with your actual import path
+import 'package:messagepart/chat_page.dart';
 
 class UserTasksPage extends StatefulWidget {
   final String userEmail;
@@ -63,41 +64,140 @@ class _UserTasksPageState extends State<UserTasksPage> {
   }
 
   Widget _buildUserTasksList() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('tasks')
-          .where('userEmail', isEqualTo: widget.userEmail)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const Text('Error');
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Text('Loading');
-        }
+    return Expanded(
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('tasks')
+            .where('userEmail', isEqualTo: widget.userEmail)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Error'),
+            );
+          }
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(
+              child: CircularProgressIndicator(),
+            );
+          }
 
-        return ListView(
-          children: snapshot.data!.docs
-              .map<Widget>((doc) => ListTile(
-            title: Text(doc['task'] ?? ''),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Duration: ${_formatDate(doc['selectedStartDay'])} - ${_formatDate(doc['selectedEndDay'])}',
+          return ListView(
+            padding: EdgeInsets.all(16.0),
+            children: snapshot.data!.docs
+                .map<Widget>((doc) => Card(
+              margin: EdgeInsets.only(bottom: 16.0),
+              child: GestureDetector(
+                onTap: () {
+                  // Show a graph dialog when the task is clicked
+                  _showGraphDialog(context, doc.id, widget.userEmail, doc['isCompleted'] ?? false);
+
+                },
+                child: ListTile(
+                  title: Text(doc['task'] ?? ''),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(height: 8.0),
+                      Text(
+                        'Duration: ${_formatDate(doc['selectedStartDay'])} - ${_formatDate(doc['selectedEndDay'])}',
+                      ),
+                      SizedBox(height: 4.0),
+                      Text(
+                        'Remaining Days: ${_calculateRemainingDays(doc['selectedEndDay'])}',
+                      ),
+                      SizedBox(height: 4.0),
+                      Text('Repetition Count: ${doc['repetitionCount']}'),
+                    ],
+                  ),
+                  trailing: Checkbox(
+                    value: doc['isCompleted'] ?? false,
+          onChanged: null),
                 ),
-                Text(
-                  'Remaining Days: ${_calculateRemainingDays(doc['selectedEndDay'])}',
-                ),
-                Text('Repetition Count: ${doc['repetitionCount']}'),
-                // Add more details as needed
-              ],
+              ),
+            ))
+                .toList(),
+          );
+        },
+      ),
+    );
+  }
+  Future<Map<String, dynamic>> _fetchTaskData(String taskId) async {
+    try {
+      // Fetch task data from Firestore based on the taskId
+      DocumentSnapshot<Map<String, dynamic>> taskDoc = await FirebaseFirestore
+          .instance
+          .collection('tasks')
+          .doc(taskId)
+          .get();
+
+      // Extract relevant data
+      bool completed = taskDoc['isCompleted'] ?? false;
+
+      // Return the fetched data as a map
+      return {'isCompleted': completed};
+    } catch (e) {
+      print('Error fetching task data: $e');
+      throw e; // You might want to handle this error more gracefully
+    }
+  }
+
+  void _showGraphDialog(BuildContext context, String taskId, String userEmail, bool isCompleted) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Graph for Task'),
+          content: Container(
+            width: double.maxFinite,
+            child: FutureBuilder<Map<String, dynamic>>(
+              future: _fetchTaskData(taskId),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return CircularProgressIndicator();
+                }
+
+                if (snapshot.hasError) {
+                  return Text('Error fetching task data');
+                }
+
+                bool completed = snapshot.data?['isCompleted'] ?? false;
+
+                // Use your graph widget here, for example, PieChart
+                return PieChart(
+                  PieChartData(
+                    sectionsSpace: 0,
+                    centerSpaceRadius: 60,
+                    startDegreeOffset: 180,
+                    sections: [
+                      PieChartSectionData(
+                        color: completed ? Colors.green : Colors.grey,
+                        radius: 50,
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
-          ))
-              .toList(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Close'),
+            ),
+          ],
         );
       },
     );
+  }
+
+
+  void _updateTaskCompletionStatus(String taskId, bool? completed) {
+    FirebaseFirestore.instance.collection('tasks').doc(taskId).update({
+      'isCompleted': completed,
+    });
   }
 
   Future<void> _scheduleNotification(
@@ -165,3 +265,4 @@ class _UserTasksPageState extends State<UserTasksPage> {
     );
   }
 }
+

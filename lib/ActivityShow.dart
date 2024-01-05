@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:messagepart/activity_page.dart';
 
@@ -15,10 +14,6 @@ class ActivityScreen extends StatelessWidget {
       body: StreamBuilder<List<Task>>(
         stream: _firebaseHelper.getTasks(),
         builder: (context, snapshot) {
-          print('Connection State: ${snapshot.connectionState}');
-          print('Has Error: ${snapshot.hasError}');
-          print('Data Available: ${snapshot.hasData}');
-
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
@@ -27,8 +22,6 @@ class ActivityScreen extends StatelessWidget {
             return Center(child: Text('No tasks available.'));
           } else {
             List<Task> tasks = snapshot.data!;
-            print('Number of tasks: ${tasks.length}');
-            print('First task: ${tasks.isNotEmpty ? tasks[0].task : "No tasks"}');
 
             return ListView.builder(
               itemCount: tasks.length,
@@ -38,18 +31,27 @@ class ActivityScreen extends StatelessWidget {
                 // Calculate the difference between start day and end day
                 Duration difference = task.selectedEndDay.difference(task.selectedStartDay);
 
-                return ListTile(
-                  title: Text('${task.task ?? 'No task name'} : ${task.userEmail ?? 'Unknown'}'),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Duration: ${difference.inDays} days'),
-                      Text('Times: ${task.repetitionCount} times'), // Display the times count
-                    ],
-                  ),
-                  trailing: Checkbox(
-                    value: task.isCompleted,
-                    onChanged: null, // Set onChanged to null to make it non-interactive
+                return Card(
+                  elevation: 3.0,
+                  margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                  child: ListTile(
+                    title: Text(
+                      '${task.task ?? 'No task name'}',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Assigned to: ${task.userEmail ?? 'Unknown'}'),
+                        SizedBox(height: 4.0),
+                        Text('Duration: ${difference.inDays} days'),
+                        Text('Times: ${task.repetitionCount} times'),
+                      ],
+                    ),
+                    trailing: Checkbox(
+                      value: task.isCompleted,
+                      onChanged: null, // Set onChanged to null to make it non-interactive
+                    ),
                   ),
                 );
               },
