@@ -8,13 +8,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:messagepart/ActivityShow.dart';
 import 'package:uuid/uuid.dart';
 import 'package:video_compress/video_compress.dart';
-
-
 class ChecklistScreen extends StatefulWidget {
   @override
   _ChecklistScreenState createState() => _ChecklistScreenState();
 }
-
 class Task {
   late String id;
   late String userId;
@@ -25,6 +22,7 @@ class Task {
   late DateTime selectedEndDay;
   late int repetitionCount;
   late String videoDownloadUrl;
+  List<int> completedDays = [];
 
   Task(
       this.id,
@@ -36,7 +34,7 @@ class Task {
       this.selectedEndDay,
       this.repetitionCount,
       this.videoDownloadUrl,
-      );
+      ) : completedDays = [];
 
   Task.fromMap(Map<String, dynamic>? map) {
     id = map?['id'] ?? '';
@@ -48,6 +46,7 @@ class Task {
     selectedEndDay = _parseTimestamp(map?['selectedEndDay']) ?? DateTime.now();
     repetitionCount = map?['repetitionCount'] ?? 0;
     videoDownloadUrl = map?['videoDownloadUrl'] ?? '';
+    completedDays = List<int>.from(map?['completedDays'] ?? []);
   }
 
   Map<String, dynamic> toMap() {
@@ -60,6 +59,7 @@ class Task {
       'selectedEndDay': selectedEndDay,
       'repetitionCount': repetitionCount,
       'videoDownloadUrl': videoDownloadUrl,
+      'completedDays': completedDays,
     };
   }
 
@@ -67,7 +67,7 @@ class Task {
     if (timestamp is Timestamp) {
       return timestamp.toDate();
     }
-    return null; // or throw an exception, depending on your logic
+    return null;
   }
 }
 
@@ -129,68 +129,58 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   Future<void> _uploadVideoToFirebaseStorage() async {
     try {
       if (_videoFile != null || (_videoBytes != null && _videoBytes!.isNotEmpty)) {
+        if (_videoFile != null) {
+          _videoFile = (await VideoCompress.compressVideo(
+            _videoFile!.path,
+            quality: VideoQuality.DefaultQuality,
+          )) as File?;
+        }
 
-        if (_videoFile != null || (_videoBytes != null && _videoBytes!.isNotEmpty)) {
+        Reference storageReference = FirebaseStorage.instance.ref().child('videos/${Uuid().v4()}.mp4');
+        UploadTask uploadTask;
 
-          if (_videoFile != null) {
-            _videoFile = (await VideoCompress.compressVideo(
-              _videoFile!.path,
-              quality: VideoQuality.DefaultQuality,
-            )) as File?;
-          }
-
-          Reference storageReference = FirebaseStorage.instance.ref().child('videos/${Uuid().v4()}.mp4');
-          UploadTask uploadTask;
-
-          if (_videoFile != null) {
-            uploadTask = storageReference.putFile(_videoFile!);
-          } else if (_videoBytes != null) {
-            uploadTask = storageReference.putData(_videoBytes!);
-          } else {
-            print('Video yüklemek için geçerli bir dosya veya veri yok');
-            // Video eklemek istemiyor, bu durumu atla
-            _addTaskToFirestore(); // Video seçilmemişse sadece görev bilgilerini ekleyin
-            return;
-          }
-
-          uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) async {
-            if (snapshot.state == TaskState.success) {
-              print('Upload complete!');
-              // Retrieve download URL here
-              _downloadURL = await snapshot.ref.getDownloadURL();
-
-              setState(() {
-                if (_videoFile != null) {
-                  _uploadedVideoFile = _videoFile; // Store the reference before setting to null
-                }
-                _videoFile = null;
-                _videoBytes = null;
-              });
-              print('Download URL: $_downloadURL');
-
-              _addTaskToFirestore();
-            } else if (snapshot.state == TaskState.running) {
-              print('Upload is still in progress...');
-            } else if (snapshot.state == TaskState.error) {
-              print('Error during upload: ${snapshot.storage}');
-            }
-          });
-          await uploadTask;
+        if (_videoFile != null) {
+          uploadTask = storageReference.putFile(_videoFile!);
+        } else if (_videoBytes != null) {
+          uploadTask = storageReference.putData(_videoBytes!);
         } else {
           print('Video yüklemek için geçerli bir dosya veya veri yok');
-          _addTaskToFirestore();
+          // Video eklemek istemiyor, bu durumu atla
+          _addTaskToFirestore(); // Video seçilmemişse sadece görev bilgilerini ekleyin
+          return;
         }
+
+        uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) async {
+          if (snapshot.state == TaskState.success) {
+            print('Upload complete!');
+            // Retrieve download URL here
+            _downloadURL = await snapshot.ref.getDownloadURL();
+
+            setState(() {
+              if (_videoFile != null) {
+                _uploadedVideoFile = _videoFile; // Store the reference before setting to null
+              }
+              _videoFile = null;
+              _videoBytes = null;
+            });
+            print('Download URL: $_downloadURL');
+
+            _addTaskToFirestore();
+          } else if (snapshot.state == TaskState.running) {
+            print('Upload is still in progress...');
+          } else if (snapshot.state == TaskState.error) {
+            print('Error during upload: ${snapshot.storage}');
+          }
+        });
+        await uploadTask;
       } else {
         print('Video yüklemek için geçerli bir dosya veya veri yok');
-
         _addTaskToFirestore();
       }
     } catch (e) {
       print('Video yüklerken hata oluştu: $e');
-
     }
   }
-
 
   void _addTaskToFirestore() async {
     try {
@@ -204,7 +194,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
           _selectedStartDay,
           _selectedEndDay,
           selectedRepetitionCount,
-          '',
+          _downloadURL,
         );
 
         // Check if a video is selected
@@ -221,6 +211,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
           videoDownloadUrl: _downloadURL,
         );
 
+        // Increment completed days count for the user
+        await _incrementCompletedDays(selectedUserId, _selectedStartDay);
+
         _taskController.clear();
       } else {
         print('Error: Task or User is empty.');
@@ -230,7 +223,28 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
     }
   }
 
+  Future<void> _incrementCompletedDays(String userId, DateTime completedDay) async {
+    try {
+      // Fetch the current completed days count for the user
+      DocumentSnapshot userDoc = await _firebaseHelper.usersCollection.doc(userId).get();
+      Map<String, dynamic>? userData = userDoc.data() as Map<String, dynamic>? ?? {};
+      Map<String, int> completedDaysCount = Map<String, int>.from(userData['completedDaysCount'] ?? {});
 
+      // Increment the count for the completed day
+      String formattedDay = _formatDateTime(completedDay);
+      completedDaysCount[formattedDay] = (completedDaysCount[formattedDay] ?? 0) + 1;
+
+      // Update the user document with the new completed days count
+      await _firebaseHelper.updateUserCompletedDays(userId, completedDaysCount);
+    } catch (e) {
+      print('Error incrementing completed days count: $e');
+    }
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    // Format DateTime to a string that can be used as a key in the completedDaysCount map
+    return '${dateTime.year}-${dateTime.month}-${dateTime.day}';
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -352,33 +366,34 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
               onPressed: () async {
                 await _uploadVideoToFirebaseStorage();
                 String task = _taskController.text.trim();
-                if (task.isNotEmpty &&
-                    selectedUserId.isNotEmpty &&
-                    _downloadURL.isNotEmpty) {
+                if (task.isNotEmpty && selectedUserId.isNotEmpty && _downloadURL.isNotEmpty) {
+                  Task newTask = Task(
+                    '', // Leave it empty, Firestore will generate the ID
+                    selectedUserId,
+                    task,
+                    false,
+                    selectedUserEmail,
+                    _selectedStartDay,
+                    _selectedEndDay,
+                    selectedRepetitionCount,
+                    _downloadURL,
+                  );
+
                   await _firebaseHelper.addTask(
-                    Task(
-                      '', // Leave it empty, Firestore will generate the ID
-                      selectedUserId,
-                      task,
-                      false,
-                      selectedUserEmail,
-                      _selectedStartDay,
-                      _selectedEndDay,
-                      selectedRepetitionCount,
-                      _downloadURL,
-                    ),
+                    newTask,
                     selectedUserId,
                     selectedStartDay: _selectedStartDay,
                     selectedEndDay: _selectedEndDay,
                     repetitionCount: selectedRepetitionCount,
                     videoDownloadUrl: _downloadURL,
                   );
+
                   _taskController.clear();
                 }
               },
               child: Text(
                 'Add Task',
-                style: TextStyle(color: Colors.white), // İsteğe bağlı: Metin rengi
+                style: TextStyle(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
                 primary: Colors.indigo,
@@ -387,6 +402,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                 ),
               ),
             ),
+
           ],
         ),
       ),
@@ -394,15 +410,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   }
 
 
-  void navigateToChecklistScreen(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ActivityScreen(), // Make sure ActivityScreen is imported correctly
-        settings: RouteSettings(arguments: _firebaseHelper),
-      ),
-    );
-  }
+
 
   Future<void> _selectNewDay(BuildContext context, bool isStartDay) async {
     DateTime? pickedDate = await showDatePicker(
@@ -492,7 +500,15 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
 class FirebaseHelper {
   final CollectionReference tasksCollection = FirebaseFirestore.instance.collection('tasks');
   final CollectionReference usersCollection = FirebaseFirestore.instance.collection('users');
-
+  Future<void> updateUserCompletedDays(String userId, Map<String, int> completedDaysCount) async {
+    try {
+      await usersCollection.doc(userId).update({
+        'completedDaysCount': completedDaysCount,
+      });
+    } catch (e) {
+      print('Error updating user completed days: $e');
+    }
+  }
   Future<void> addTask(Task task, String userId,
       {required DateTime selectedStartDay,
         required DateTime selectedEndDay,

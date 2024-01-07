@@ -108,7 +108,7 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
 
     return CheckboxListTile(
       title: Text('$userName $userSurname'),
-      value: selectedMembers.contains(userName),
+      value: selectedMembers.contains(userId),
       onChanged: (bool? value) {
         setState(() {
           if (value!) {
@@ -127,7 +127,24 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
         return Padding(
           padding: const EdgeInsets.all(4.0),
           child: Chip(
-            label: Text(userId),
+            label: FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(userId)
+                  .get(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError || !snapshot.hasData) {
+                  return Text('Unknown User');
+                }
+
+                Map<String, dynamic> userData =
+                    snapshot.data!.data() as Map<String, dynamic>? ?? {};
+                final String userName = userData['name'] ?? '';
+                final String userSurname = userData['surname'] ?? '';
+
+                return Text('$userName $userSurname');
+              },
+            ),
             deleteIconColor: Colors.red,
             onDeleted: () {
               setState(() {

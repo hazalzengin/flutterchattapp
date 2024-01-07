@@ -35,8 +35,14 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
               });
             },
           ),
+          IconButton(
+            icon: Icon(Icons.group),
+            onPressed: () {
+              _showGroupMembersDialog(); // Show group members in an alert dialog
+            },
+          ),
         ],
-        backgroundColor: Colors.blue, // Set your desired app bar color
+        backgroundColor: Colors.blue,
       ),
       body: Column(
         children: [
@@ -51,7 +57,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
   }
 
   Widget _buildGroupMessages() {
-    return Flexible(
+    return Expanded(
       child: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('groups')
@@ -67,7 +73,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
             return Center(child: CircularProgressIndicator());
           }
 
-          List<DocumentSnapshot> messages = snapshot.data!.docs;
+          List<QueryDocumentSnapshot> messages = snapshot.data!.docs;
 
           return ListView.builder(
             controller: _scrollController,
@@ -80,45 +86,49 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
               bool isCurrentUser =
                   data['sender'] == FirebaseAuth.instance.currentUser!.email;
 
-              return Align(
-                alignment: isCurrentUser
-                    ? Alignment.centerRight
-                    : Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Container(
-                    padding: const EdgeInsets.all(12.0),
-                    decoration: BoxDecoration(
-                      color: isCurrentUser ? Colors.blue : Colors.green,
-                      borderRadius: BorderRadius.circular(15.0),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          data['text'],
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16.0,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        SizedBox(height: 4.0),
-                        Text(
-                          'Sender: ${data['sender']}',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12.0,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
+              return _buildMessageBubble(data, isCurrentUser);
             },
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildMessageBubble(Map<String, dynamic> data, bool isCurrentUser) {
+    return Align(
+      alignment: isCurrentUser
+          ? Alignment.centerRight
+          : Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Container(
+          padding: const EdgeInsets.all(12.0),
+          decoration: BoxDecoration(
+            color: isCurrentUser ? Colors.blue : Colors.green,
+            borderRadius: BorderRadius.circular(15.0),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                data['text'],
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16.0,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              SizedBox(height: 4.0),
+              Text(
+                'Sender: ${data['sender']}',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12.0,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -172,7 +182,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
     );
   }
 
-  Widget _buildUserListItem(DocumentSnapshot document) {
+  Widget _buildUserListItem(QueryDocumentSnapshot document) {
     Map<String, dynamic> data = document.data() as Map<String, dynamic>? ?? {};
 
     final String userName = data['name'] ?? '';
@@ -210,7 +220,6 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
     }
   }
 
-
   void _handleSendMessage() async {
     try {
       String? currentUserId = FirebaseAuth.instance.currentUser!.email;
@@ -240,7 +249,8 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
     }
   }
 
-  Future<void> _showUserConfirmationDialog(String userEmail, String userId) async {
+  Future<void> _showUserConfirmationDialog(
+      String userEmail, String userId) async {
     bool confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -249,7 +259,9 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
           content: Text('Do you want to add $userEmail to the group?'),
           actions: <Widget>[
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
               child: Text('No'),
             ),
             TextButton(
@@ -262,7 +274,8 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
           ],
         );
       },
-    ) ?? false;
+    ) ??
+        false;
 
     if (confirm) {
       // Add the user to the group
@@ -283,6 +296,125 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
       });
     } catch (error) {
       print('Error adding user to the group: $error');
+    }
+  }
+
+  void _showGroupMembersDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Group Members'),
+          content: Container(
+            width: double.maxFinite,
+            child: _buildGroupMembersList(),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildGroupMembersList() {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('groups')
+          .doc(widget.groupId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        Map<String, dynamic> groupData =
+            snapshot.data!.data() as Map<String, dynamic>? ?? {};
+        List<dynamic> members = groupData['members'] ?? [];
+
+        return ListView.builder(
+          shrinkWrap: true,
+          itemCount: members.length,
+          itemBuilder: (context, index) {
+            return _buildGroupMemberItem(members[index]);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildGroupMemberItem(String userId) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Text('Loading...');
+        }
+
+        Map<String, dynamic> userData =
+            snapshot.data!.data() as Map<String, dynamic>? ?? {};
+        final String userName = userData['name'] ?? '';
+        final String userSurname = userData['surname'] ?? '';
+
+        return ListTile(
+          title: Text('$userName $userSurname'),
+          trailing: IconButton(
+            icon: Icon(Icons.delete),
+            onPressed: () {
+              _showDeleteConfirmationDialog(userId);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _showDeleteConfirmationDialog(String userId) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Delete User'),
+          content: Text(
+              'Are you sure you want to delete this user from the group?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _handleDeleteUser(userId);
+              },
+              child: Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _handleDeleteUser(String userId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('groups')
+          .doc(widget.groupId)
+          .update({
+        'members': FieldValue.arrayRemove([userId]),
+      });
+    } catch (error) {
+      print('Error deleting user from the group: $error');
     }
   }
 }
