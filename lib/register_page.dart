@@ -5,7 +5,7 @@ import 'package:messagepart/components/my_button.dart';
 import 'package:messagepart/components/my_text_field.dart';
 import 'package:messagepart/services/auth/auth_service.dart';
 import 'package:provider/provider.dart';
-enum UserType { trainee, trainer}
+enum UserType { trainee, trainer,waittrainer}
 
 
 class RegisterPage extends StatefulWidget {
@@ -29,6 +29,8 @@ class _RegisterPageState extends State<RegisterPage> {
   UserType userType = UserType.trainee;
 
   Future<void> uploadCertification() async {
+    await Future.delayed(Duration.zero); // Ensure it's scheduled in the next frame
+
     if (userType == UserType.trainer) {
       certificationFileResult = await FilePicker.platform.pickFiles();
 
@@ -54,11 +56,21 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  void signup() async {
+
+  void signup(BuildContext context) async {
     if (passwordController.text != confirmPasswordController.text) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Şifre eşleşmemektedir.'),
+          content: Text('Passwords do not match.'),
+        ),
+      );
+      return;
+    }
+
+    if (userType == UserType.trainer && certificationFileResult == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Certification file is required for trainers.'),
         ),
       );
       return;
@@ -66,6 +78,11 @@ class _RegisterPageState extends State<RegisterPage> {
 
     final authService = Provider.of<AuthService>(context, listen: false);
     try {
+      // Set userType to trainer if the user is a trainer
+      if (userType == UserType.trainer) {
+        userType = UserType.waittrainer; // Change userType to waittrainer or update accordingly
+      }
+
       await authService.signUpWithEmailandPassword(
         emailController.text,
         passwordController.text,
@@ -74,18 +91,40 @@ class _RegisterPageState extends State<RegisterPage> {
         surnameController.text,
         phoneNumberController.text,
         int.parse(ageController.text),
-        userType,
+        (userType=UserType.waittrainer) as UserType,
+        context
       );
+
+      if (userType == UserType.waittrainer) {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Text('Your registration is pending approval'),
+              content: Text('You will be notified once your registration is approved by the admin.'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            e.toString(),
+            'Registration failed. ${e.toString()}',
           ),
         ),
       );
     }
   }
+
 
 
   @override
@@ -180,7 +219,8 @@ class _RegisterPageState extends State<RegisterPage> {
                     keyboardType: TextInputType.text,
                   ),
                   const SizedBox(height: 10),
-                  MyButton(onTap: signup, text: 'Sign Up'),
+                  MyButton(onTap: () => signup(context), text: 'Sign Up'),
+
                   const SizedBox(height: 50),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -206,4 +246,5 @@ class _RegisterPageState extends State<RegisterPage> {
       ),
     );
   }
+
 }

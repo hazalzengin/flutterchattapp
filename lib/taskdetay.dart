@@ -59,27 +59,32 @@ class _TaskDetayState extends State<TaskDetay> {
 
             bool isTodayInRange = today.isAfter(startDay) && today.isBefore(endDay);
 
-            return Card(
-              elevation: 3,
-              child: ListTile(
-                title: Text(
-                  taskName,
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Task ID: $taskId'),
-                    Text('Description: $taskDescription'),
-                    Text('Repetition Count: $repetitionCount'),
-                    ElevatedButton(
-                      onPressed: isTodayInRange
-                          ? () => _showDaySelectionDialog(taskId, endDay)
-                          : null,
-                      child: Text('Mark Day as Completed'),
-                    ),
-                    _buildCheckboxList(taskId, taskData['completedDays'] ?? [], endDay),
-                  ],
+            return GestureDetector(
+              onTap: isTodayInRange
+                  ? () => _showDaySelectionDialog(taskId, endDay)
+                  : null,
+              child: Card(
+                elevation: 3,
+                child: ListTile(
+                  title: Text(
+                    taskName,
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Task ID: $taskId'),
+                      Text('Description: $taskDescription'),
+                      Text('Repetition Count: $repetitionCount'),
+                      ElevatedButton(
+                        onPressed: isTodayInRange
+                            ? () => _showDaySelectionDialog(taskId, endDay)
+                            : null,
+                        child: Text('Mark Day as Completed'),
+                      ),
+                      _buildCheckboxList(taskId, taskData['completedDays'] ?? [], endDay),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -88,6 +93,7 @@ class _TaskDetayState extends State<TaskDetay> {
       },
     );
   }
+
 
   Widget _buildCheckboxList(String taskId, List<dynamic> completedDays, DateTime endDay) {
     List<int?> convertedCompletedDays = (completedDays as List<dynamic>?)?.cast<int>() ?? [];
@@ -162,32 +168,35 @@ class _TaskDetayState extends State<TaskDetay> {
 
     List<bool> dayCompletionStatus = List.generate(totalDays, (index) => false);
 
-    return Column(
-      children: List.generate(totalDays, (index) {
-        DateTime dayDate = today.add(Duration(days: index));
-        bool isDaySelectable = today.isBefore(dayDate) && (index == 0);
+    return SingleChildScrollView(
+      child: Column(
+        children: List.generate(totalDays, (index) {
+          DateTime dayDate = today.add(Duration(days: index));
+          bool isDaySelectable = today.isBefore(dayDate) && (index == 0);
 
-        return CheckboxListTile(
-          title: Text('Day ${index + 1} - ${dayDate.toString().substring(0, 10)}'),
-          value: dayCompletionStatus[index],
-          onChanged: isDaySelectable
-              ? (value) {
-            print('Checkbox changed for Day ${index + 1}. New value: $value');
-            setState(() {
-              dayCompletionStatus[index] = value ?? false;
-            });
+          return CheckboxListTile(
+            title: Text('Day ${index + 1} - ${dayDate.toString().substring(0, 10)}'),
+            value: dayCompletionStatus[index],
+            onChanged: isDaySelectable
+                ? (value) {
+              print('Checkbox changed for Day ${index + 1}. New value: $value');
+              setState(() {
+                dayCompletionStatus[index] = value ?? false;
+              });
 
-            if (value ?? false) {
-              _updateDayCompletionStatus(taskId, index + 1, value ?? false);
-            } else {
-
+              if (value ?? false) {
+                _updateDayCompletionStatus(taskId, index + 1, value ?? false);
+              } else {
+                // Handle the case when the checkbox is unchecked
+              }
             }
-          }
-              : null,
-        );
-      }),
+                : null,
+          );
+        }),
+      ),
     );
   }
+
 
   Future<List<Map<String, dynamic>>> _fetchUserTasks(String userId) async {
     try {

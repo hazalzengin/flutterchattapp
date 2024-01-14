@@ -56,7 +56,7 @@ class UserList extends StatelessWidget {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (userType == -1) ...[
+                  if (userType == 2) ...[
                     ElevatedButton(
                       onPressed: () {
                         _showConfirmationDialog(

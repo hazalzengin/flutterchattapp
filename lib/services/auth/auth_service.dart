@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,12 +7,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:messagepart/register_page.dart';
 
-
 class AuthService with ChangeNotifier {
   static const Map<int, UserType> userTypeMapping = {
     0: UserType.trainee,
     1: UserType.trainer,
-
+    2:UserType.waittrainer
   };
 
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
@@ -58,7 +56,6 @@ class AuthService with ChangeNotifier {
       UserCredential userCredential = await _firebaseAuth
           .signInWithEmailAndPassword(email: email, password: password);
 
-      // Fetch the user document from Firestore
       DocumentSnapshot userSnapshot = await _firebaseFirestore
           .collection('users')
           .doc(userCredential.user!.uid)
@@ -73,6 +70,11 @@ class AuthService with ChangeNotifier {
     }
   }
 
+
+  Future<void> signOut() async {
+    await FirebaseAuth.instance.signOut();
+  }
+
   Future<UserCredential> signUpWithEmailandPassword(
       String email,
       String password,
@@ -82,14 +84,17 @@ class AuthService with ChangeNotifier {
       String phoneNumber,
       int age,
       UserType userType,
+      BuildContext context,
       ) async {
     try {
-      UserCredential userCredential = await _firebaseAuth.createUserWithEmailAndPassword(
+      UserCredential userCredential =
+      await _firebaseAuth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      _firebaseFirestore.collection('users').doc(userCredential.user!.uid).set(
+      // Set user data in Firestore
+      await _firebaseFirestore.collection('users').doc(userCredential.user!.uid).set(
         {
           'uid': userCredential.user!.uid,
           'email': email,
@@ -102,37 +107,22 @@ class AuthService with ChangeNotifier {
         SetOptions(merge: true),
       );
 
+      // Upload certification file if available
       if (certificationFileResult != null) {
-        String certificationFileURL =
-        await uploadCertificationFile(userCredential.user!.uid, certificationFileResult);
+        String certificationFileURL = await uploadCertificationFile(
+          userCredential.user!.uid,
+          certificationFileResult,
+        );
 
-        _firebaseFirestore.collection('users').doc(userCredential.user!.uid).update(
+        // Update certificationFileURL in Firestore
+        await _firebaseFirestore.collection('users').doc(userCredential.user!.uid).update(
           {'certificationFileURL': certificationFileURL},
         );
       }
 
-      navigateBasedOnUserType(userType);
-
       return userCredential;
     } on FirebaseAuthException catch (e) {
       throw Exception(e.code);
-    }
-  }
-
-  Future<void> signOut() async {
-    await FirebaseAuth.instance.signOut();
-  }
-
-  Future<void> navigateBasedOnUserType(UserType userType) async {
-    switch (userType) {
-      case UserType.trainee:
-      // Navigate to Trainee Page
-      // Example: Navigator.pushReplacementNamed(context, '/traineePage');
-        break;
-      case UserType.trainer:
-      // Navigate to Trainer Page
-      // Example: Navigator.pushReplacementNamed(context, '/trainerPage');
-        break;
     }
   }
 
